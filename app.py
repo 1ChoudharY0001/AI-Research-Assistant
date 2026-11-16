@@ -1,6 +1,16 @@
-
+import os
 import json
 import streamlit as st
+
+# Load API keys from Streamlit Cloud Secrets
+try:
+    if "GROQ_API_KEY" in st.secrets:
+        os.environ["GROQ_API_KEY"] = st.secrets["GROQ_API_KEY"]
+
+    if "TAVILY_API_KEY" in st.secrets:
+        os.environ["TAVILY_API_KEY"] = st.secrets["TAVILY_API_KEY"]
+except Exception:
+    pass
 
 from agents import run_research_assistant
 
@@ -20,80 +30,64 @@ Research, Analysis, Writer, Reviewer, and Revision.
 
 with st.sidebar:
     st.header("Settings")
-
     max_revisions = st.slider(
         "Maximum revisions",
         min_value=0,
         max_value=5,
         value=2
     )
-
     st.divider()
     st.info("Powered by Groq, Tavily and LangGraph")
 
-
 topic = st.text_area(
     "Enter your research topic",
-    placeholder="Example: Impact of Artificial Intelligence on Indian Education",
-    height=120
+    placeholder="Example: Impact of artificial intelligence on education"
 )
 
-if st.button("🚀 Generate Research Report", type="primary"):
+if st.button("Generate Research Report", type="primary"):
     if not topic.strip():
         st.warning("Please enter a research topic.")
     else:
-        try:
-            with st.spinner("AI agents are researching and preparing your report..."):
+        with st.spinner("AI agents are researching and preparing your report..."):
+            try:
                 result = run_research_assistant(
-                    topic=topic,
+                    topic.strip(),
                     max_revisions=max_revisions
                 )
 
-            final_output = result.get("final_output", {})
-            report = final_output.get("report", "")
-            review = final_output.get("review", {})
+                st.success("Research process completed!")
 
-            st.success("Research report generated!")
+                final_output = result.get("final_output", {})
+                review = result.get("review", {})
 
-            col1, col2, col3 = st.columns(3)
+                st.subheader("Research Report")
+                report_text = (
+                    final_output.get("report")
+                    or result.get("report", "No report generated.")
+                )
+                st.markdown(report_text)
 
-            col1.metric(
-                "Review Score",
-                f"{review.get('score', 'N/A')}/10"
-            )
+                st.subheader("Review")
+                st.write("Status:", result.get("status", "Unknown"))
+                st.write("Score:", review.get("score", "N/A"))
+                st.write("Revisions:", result.get("revision_count", 0))
 
-            col2.metric(
-                "Revisions",
-                final_output.get("revision_count", 0)
-            )
+                with st.expander("Reviewer feedback"):
+                    st.write(review)
 
-            col3.metric(
-                "Status",
-                result.get("status", "Unknown")
-            )
+                st.download_button(
+                    "Download Report",
+                    data=report_text,
+                    file_name="research_report.md",
+                    mime="text/markdown"
+                )
 
-            st.divider()
+                st.download_button(
+                    "Download Full Results (JSON)",
+                    data=json.dumps(result, indent=2, default=str),
+                    file_name="research_results.json",
+                    mime="application/json"
+                )
 
-            st.subheader("📄 Final Research Report")
-            st.markdown(report)
-
-            st.download_button(
-                "⬇️ Download Markdown Report",
-                data=report,
-                file_name="research_report.md",
-                mime="text/markdown"
-            )
-
-            st.download_button(
-                "⬇️ Download JSON Summary",
-                data=json.dumps(result, indent=2, default=str),
-                file_name="research_summary.json",
-                mime="application/json"
-            )
-
-            with st.expander("Reviewer Feedback"):
-                st.json(review)
-
-        except Exception as error:
-            st.error(f"An error occurred: {error}")
-            st.exception(error)
+            except Exception as e:
+                st.error(f"An error occurred: {e}")
